@@ -25,7 +25,7 @@ func newManager(w io.Writer, allowedImages map[string]string) (*containers.Manag
 
 	return containers.NewManager(&containers.ManagerOptions{
 		SocketPath:    socket,
-		Logger:        log.New(w, "", log.Flags()),
+		Logger:        log.New(io.Discard, "", log.Flags()),
 		AllowedImages: allowedImages,
 	})
 }
@@ -58,6 +58,7 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:  "list",
+				Aliases: []string{"ls"},
 				Usage: "List containers belonging to Studentbox",
 				Action: func(c *cli.Context) error {
 					manager, err := newManager(c.App.Writer, nil)
@@ -72,11 +73,14 @@ func main() {
 
 					if len(containers) == 0 {
 						fmt.Fprintln(c.App.Writer, "No containers")
-					} else {
-						for _, container := range containers {
-							fmt.Fprintf(c.App.Writer, "%s/%s\n", container.User, container.Project)
-						}
+						return nil
 					}
+					
+					fmt.Fprintln(c.App.Writer, "Containers (user/project):")
+					for _, container := range containers {
+						fmt.Fprintf(c.App.Writer, "- %s/%s\n", container.User, container.Project)
+					}
+
 					return nil
 				},
 			},
