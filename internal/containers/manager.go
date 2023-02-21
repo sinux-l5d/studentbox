@@ -10,20 +10,39 @@ import (
 	"github.com/containers/podman/v4/pkg/bindings"
 	"github.com/containers/podman/v4/pkg/bindings/containers"
 	"github.com/containers/podman/v4/pkg/bindings/images"
-	"github.com/containers/podman/v4/pkg/domain/entities"
 	"github.com/containers/podman/v4/pkg/specgen"
 )
 
+// Object handling containers creation and retrieving.
+// See Container for container-specific operations
 type Manager struct {
-	ctx context.Context
+	ctx        *context.Context
 	socketPath string
-	log *log.Logger
+	log        *log.Logger
+	images     map[string]string
 }
 
+// Option when creating a Manager
 type ManagerOptions struct {
 	SocketPath string
-	Logger *log.Logger
+	Logger     *log.Logger
+	// Images allowed. The key is the identifier, value is full name (e.g. docker.io/library/busybox)
+	Images map[string]string
 }
+
+const (
+	// Base name for all labels
+	L_BASE = "studentbox"
+
+	// Is managed by this library
+	L_IS_OWNED = L_BASE + ".container"
+
+	// Which user is this container owned by
+	L_USER = L_BASE + ".user"
+
+	// The project associated to the user
+	L_PROJECT = L_BASE + ".project"
+)
 
 func DefaultManagerOptions() *ManagerOptions {
 	sockDir := os.Getenv("XDG_RUNTIME_DIR")
@@ -32,7 +51,8 @@ func DefaultManagerOptions() *ManagerOptions {
 	}
 	return &ManagerOptions{
 		SocketPath: "unix://" + sockDir + "/podman/podman.sock",
-		Logger: log.New(os.Stdout, "[containers/manager] ", log.LstdFlags),
+		Logger:     log.New(os.Stdout, "[containers] ", log.LstdFlags),
+		Images:     map[string]string{},
 	}
 }
 
@@ -48,18 +68,23 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 		return nil, err
 	}
 
+	if len(opt.Images) == 0 {
+		opt.Logger.Println("WARN: no images allowed has been set")
+	}
+
 	return &Manager{
-		ctx: ctx,
+		ctx:        &ctx,
 		socketPath: opt.SocketPath,
-		log: opt.Logger,
+		log:        opt.Logger,
+		images:     opt.Images,
 	}, nil
 }
 
-func (m *Manager) Containers() ([]entities.ListContainer, error) {
-	cs, err := containers.List(m.ctx, &containers.ListOptions{
-		// filter label studentbox.container=true
+func (m *Manager) Containers() ([]*Container, error) {
+	cs, err := containers.List(*m.ctx, &containers.ListOptions{
+		// Only containers managed by this lib
 		Filters: map[string][]string{
-			"label": {"studentbox.container=true"},
+			"label": {L_IS_OWNED + "=true"},
 		},
 	})
 
@@ -67,27 +92,38 @@ func (m *Manager) Containers() ([]entities.ListContainer, error) {
 		return nil, err
 	}
 
-	return cs, nil
+	// Convert to []*Container
+	containers := make([]*Container, len(cs))
+	for _, container := range cs {
+		containers = append(containers, NewFromListContainer(*m.ctx, container))
+	}
+
+	return containers, nil
 }
 
 func (m *Manager) ContainerExists(user, project string) (bool, error) {
-	return containers.Exists(m.ctx, user + "-" + project, nil)
+	return containers.Exists(*m.ctx, user+"-"+project, nil)
 }
 
 func (m *Manager) PullImageIfNotExists(image string) error {
-	exists, err := images.Exists(m.ctx, image, nil)
+	exists, err := images.Exists(*m.ctx, image, nil)
 	if err != nil {
 		return err
 	}
 	if exists {
 		return nil
 	}
-	r, err  := images.Pull(m.ctx, image, &images.PullOptions{})
-	m.log.Println("PullImageIfNotExists", r, err)
+	quiet := true
+	r, err := images.Pull(*m.ctx, image, &images.PullOptions{Quiet: &quiet})
+	m.log.Println("INFO: PullImageIfNotExists", r, err)
 	return err
 }
 
-func (m *Manager) SpawnContainer(user, project string) error {
+func (m *Manager) SpawnContainer(user, project, imageName string) error {
+	image, ok := m.images[imageName]
+	if !ok {
+		return errors.New("image " + imageName + " is not in allowed images")
+	}
 
 	exists, err := m.ContainerExists(user, project)
 	if err != nil {
@@ -98,21 +134,21 @@ func (m *Manager) SpawnContainer(user, project string) error {
 		return errors.New("container already exists")
 	}
 
-	err = m.PullImageIfNotExists("docker.io/library/busybox")
+	err = m.PullImageIfNotExists(image)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
-	spec := specgen.NewSpecGenerator("docker.io/library/busybox", false)
+	spec := specgen.NewSpecGenerator(image, false)
 	spec.Terminal = true
 	spec.Name = user + "-" + project
 	spec.Labels = map[string]string{
-		"studentbox.container": "true",
-		"studentbox.user": user,
-		"studentbox.project": project,
+		L_IS_OWNED: "true",
+		L_USER:     user,
+		L_PROJECT:  project,
 	}
 
-	r, err := containers.CreateWithSpec(m.ctx, spec, nil)
+	r, err := containers.CreateWithSpec(*m.ctx, spec, nil)
 	if err != nil {
 		return err
 	}
@@ -123,8 +159,11 @@ func (m *Manager) SpawnContainer(user, project string) error {
 		m.log.Println("WARN:", r.Warnings)
 	}
 
-	err = containers.Start(m.ctx, r.ID, nil)
+	err = containers.Start(*m.ctx, r.ID, nil)
 	if err != nil {
+		m.log.Println("ERROR: Failed to start container, rolling back: ", err)
+		force := true
+		containers.Remove(*m.ctx, r.ID, &containers.RemoveOptions{Force: &force})
 		return err
 	}
 	return nil
