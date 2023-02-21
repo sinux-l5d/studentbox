@@ -93,7 +93,7 @@ func (m *Manager) Containers() ([]*Container, error) {
 	}
 
 	// Convert to []*Container
-	containers := make([]*Container, len(cs))
+	containers := make([]*Container, 0, len(cs))
 	for _, container := range cs {
 		containers = append(containers, NewFromListContainer(*m.ctx, container))
 	}
