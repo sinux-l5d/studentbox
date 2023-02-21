@@ -27,7 +27,7 @@ type ManagerOptions struct {
 	SocketPath string
 	Logger     *log.Logger
 	// Images allowed. The key is the identifier, value is full name (e.g. docker.io/library/busybox)
-	Images map[string]string
+	AllowedImages map[string]string
 }
 
 const (
@@ -50,9 +50,9 @@ func DefaultManagerOptions() *ManagerOptions {
 		sockDir = "/tmp"
 	}
 	return &ManagerOptions{
-		SocketPath: "unix://" + sockDir + "/podman/podman.sock",
-		Logger:     log.New(os.Stdout, "[containers] ", log.LstdFlags),
-		Images:     map[string]string{},
+		SocketPath:    "unix://" + sockDir + "/podman/podman.sock",
+		Logger:        log.New(os.Stdout, "[containers] ", log.LstdFlags),
+		AllowedImages: map[string]string{},
 	}
 }
 
@@ -68,7 +68,7 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 		return nil, err
 	}
 
-	if len(opt.Images) == 0 {
+	if len(opt.AllowedImages) == 0 {
 		opt.Logger.Println("WARN: no images allowed has been set")
 	}
 
@@ -76,7 +76,7 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 		ctx:        &ctx,
 		socketPath: opt.SocketPath,
 		log:        opt.Logger,
-		images:     opt.Images,
+		images:     opt.AllowedImages,
 	}, nil
 }
 
@@ -102,7 +102,11 @@ func (m *Manager) Containers() ([]*Container, error) {
 }
 
 func (m *Manager) ContainerExists(user, project string) (bool, error) {
-	return containers.Exists(*m.ctx, user+"-"+project, nil)
+	exists, err := containers.Exists(*m.ctx, user+"-"+project, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if container exists: %w", err)
+	}
+	return exists, nil
 }
 
 func (m *Manager) PullImageIfNotExists(image string) error {
@@ -128,7 +132,7 @@ func (m *Manager) SpawnContainer(user, project, imageName string) error {
 	exists, err := m.ContainerExists(user, project)
 	if err != nil {
 		// Wrap error
-		return fmt.Errorf("failed to check if container exists: %w", err)
+		return err
 	}
 	if exists {
 		return errors.New("container already exists")
@@ -167,4 +171,23 @@ func (m *Manager) SpawnContainer(user, project, imageName string) error {
 		return err
 	}
 	return nil
+}
+
+// Get a container by name of user and project
+// might return nil
+func (m *Manager) GetContainer(user, project string) (*Container, error) {
+	exists, err := m.ContainerExists(user, project)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, &ErrContainerDontExists{User: user, Project: project}
+	}
+
+	return &Container{
+		ctx:     *m.ctx,
+		Name:    user + "-" + project,
+		User:    user,
+		Project: project,
+	}, nil
 }

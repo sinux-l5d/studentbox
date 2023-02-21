@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -15,6 +17,22 @@ var (
 	// global flags
 	socket string
 )
+
+func newManager(w io.Writer, allowedImages map[string]string) (*containers.Manager, error) {
+	if allowedImages == nil {
+		allowedImages = map[string]string{}
+	}
+
+	return containers.NewManager(&containers.ManagerOptions{
+		SocketPath:    socket,
+		Logger:        log.New(w, "", log.Flags()),
+		AllowedImages: allowedImages,
+	})
+}
+
+// func (app *cli.App) Printf(format string, a ...any) (int, error) {
+// 	return fmt.Fprintf(app.Writer, format+"\n", a...)
+// }
 
 func main() {
 	app := &cli.App{
@@ -42,10 +60,7 @@ func main() {
 				Name:  "list",
 				Usage: "List containers belonging to Studentbox",
 				Action: func(c *cli.Context) error {
-					manager, err := containers.NewManager(&containers.ManagerOptions{
-						SocketPath: socket,
-						Logger:     log.New(c.App.Writer, "", log.Flags()),
-					})
+					manager, err := newManager(c.App.Writer, nil)
 					if err != nil {
 						return err
 					}
@@ -54,6 +69,7 @@ func main() {
 					if err != nil {
 						return err
 					}
+
 					if len(containers) == 0 {
 						fmt.Fprintln(c.App.Writer, "No containers")
 					} else {
@@ -64,11 +80,80 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "status",
+				Usage: "Print status of a project's container",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "user",
+						Aliases:  []string{"u"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "project",
+						Aliases:  []string{"p"},
+						Required: true,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					manager, err := newManager(c.App.Writer, nil)
+					if err != nil {
+						return err
+					}
+					user, project := c.String("user"), c.String("project")
+					container, err := manager.GetContainer(user, project)
+					if err != nil {
+						if errors.Is(err, &containers.ErrContainerDontExists{}) {
+							fmt.Fprintf(c.App.ErrWriter, "container for user %s, project %s doesn't exist\n", user, project)
+						} else {
+							return err
+						}
+					}
+
+					status, err := container.Status()
+					if err != nil {
+						return err
+					}
+
+					fmt.Fprintf(c.App.Writer, "Status of %s: %s\n", container.Name, status)
+
+					return nil
+				},
+			},
+			{
+				Name:   "spawn-dummy",
+				Hidden: true,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "user",
+						Aliases:  []string{"u"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "project",
+						Aliases:  []string{"p"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:    "image",
+						Aliases: []string{"i"},
+						Value:   "docker.io/library/busybox",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					manager, err := newManager(c.App.Writer, map[string]string{"cli": c.String("image")})
+					if err != nil {
+						return err
+					}
+
+					return manager.SpawnContainer(c.String("user"), c.String("project"), "cli")
+				},
+			},
 		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintf(app.Writer, "Error: %s", err)
+		fmt.Fprintf(app.Writer, "Error: %s\n", err)
 		os.Exit(1)
 	}
 }
