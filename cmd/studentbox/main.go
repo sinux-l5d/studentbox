@@ -18,7 +18,7 @@ var (
 	socket string
 )
 
-func newManager(w io.Writer, allowedImages map[string]string) (*containers.Manager, error) {
+func newManager(_ io.Writer, allowedImages map[string]string) (*containers.Manager, error) {
 	if allowedImages == nil {
 		allowedImages = map[string]string{}
 	}
@@ -57,9 +57,9 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:  "list",
+				Name:    "list",
 				Aliases: []string{"ls"},
-				Usage: "List containers belonging to Studentbox",
+				Usage:   "List containers belonging to Studentbox",
 				Action: func(c *cli.Context) error {
 					manager, err := newManager(c.App.Writer, nil)
 					if err != nil {
@@ -75,7 +75,7 @@ func main() {
 						fmt.Fprintln(c.App.Writer, "No containers")
 						return nil
 					}
-					
+
 					fmt.Fprintln(c.App.Writer, "Containers (user/project):")
 					for _, container := range containers {
 						fmt.Fprintf(c.App.Writer, "- %s/%s\n", container.User, container.Project)
