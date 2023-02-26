@@ -59,7 +59,7 @@ func DefaultManagerOptions() *ManagerOptions {
 func NewManager(opt *ManagerOptions) (*Manager, error) {
 	// Default options
 	if opt == nil {
-		return nil, errors.New("ManagerOption is required")
+		return nil, &ParameterRequired{ParamName: "opt"}
 	}
 
 	ctx := context.Background()
