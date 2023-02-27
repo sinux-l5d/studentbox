@@ -1,0 +1,6 @@
+RewriteEngine on
+Header set X-Studentbox "test-htaccess"
+
+# These two lines redirect the root to index.html.
+RewriteRule ^$ /index.php [R=301,L]
+RewriteRule ^/$ /index.php [R=301,L]
