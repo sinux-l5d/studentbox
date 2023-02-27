@@ -1,0 +1,78 @@
+name: Check if new runtimes
+
+# In prod, should be on tag
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  check_new:
+    name: Check new/modified runtimes since last tag
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+      to_process: ${{ steps.check.outputs.to_process }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # fetch all
+
+      - name: Install jc
+        run: sudo apt-get install jc
+
+      # https://github.com/orgs/community/discussions/25669#discussioncomment-3248665
+      - name: Check if new files
+        id: check
+        env:
+          TRACK: "runtimes"
+        run: |
+          # None or one tag (first version)
+          if [[ $(git tag -l | wc -l) -le 1 ]]; then
+            echo "run=true" >> $GITHUB_OUTPUT
+
+            PROCESS=$(ls -A ${{ env.TRACK }} | jc --ls  | jq -c '[ .[].filename ]')
+            echo "to_process=$PROCESS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | head -n 2 | tail -n 1)
+
+          # Because of on: rule, we now HEAD = new tag
+          # Only deal with Added, Modified, Renamed and Type-changed file,
+          # we don't want to build removed files
+          CHANGED_FILES=$(git diff --diff-filter=AMRT --name-only $PREVIOUS_TAG...HEAD)
+
+          # No file changed
+          if [[ -z "$CHANGED_FILES" ]]; then
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check if new/changed files are in track folder
+          PROCESS="[]"
+          for FILE in $CHANGED_FILES; do
+            if [[ $FILE == ${{ env.TRACK }}/* ]]; then
+              echo "run=true" >> $GITHUB_OUTPUT
+
+              # Add subfolder to process
+              SUBFOLDER=$(echo $FILE | cut -d'/' -f2)
+              PROCESS=$(echo $PROCESS | jq -c --arg NEW "$SUBFOLDER" '. += [$NEW] | unique')
+            fi
+          done
+          echo "to_process=$PROCESS" >> $GITHUB_OUTPUT
+
+  call_reusable_build:
+    needs: check_new
+    if: needs.check_new.outputs.run == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        subfolder: ${{ fromJSON(needs.check_new.outputs.to_process) }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-runtime-containers.yaml
+    with:
+      runtime: ${{ matrix.subfolder }}
+      track: "runtimes"
+

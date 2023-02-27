@@ -1,0 +1,91 @@
+name: Build runtime containers
+
+on:
+  # trigger by other workflows
+  workflow_call:
+    inputs:
+      runtime:
+        description: 'Runtime to build (directory containing one or more containerfiles). E.g.: "lamp"'
+        required: true
+        type: string
+      track:
+        description: 'Directory containing runtime folders'
+        default: 'runtimes'
+        type: string
+  # trigger manually
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: 'Runtime to build (directory containing one or more containerfiles). E.g.: "lamp"'
+        required: true
+        type: string
+      track:
+        description: 'Directory containing runtime folders'
+        default: 'runtimes'
+        type: string
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository }}
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  find_containerfiles:
+    runs-on: ubuntu-latest
+    outputs:
+      files: ${{ steps.set-files.outputs.files}}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install jc
+        run: sudo apt-get install jc
+
+      - name: Finding containerfiles
+        id: set-files
+        run: |
+          FILES=$(ls -A ${{ inputs.track }}/${{ inputs.runtime }}/ | jc --ls | jq -c '[ .[].filename | select(endswith(".containerfile")) ]')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+  
+  build-and-publish:
+    needs: find_containerfiles
+    runs-on: ubuntu-latest
+    if: needs.find_containerfiles.outputs.files != '[]'
+    strategy:
+      fail-fast: true
+      matrix:
+        containerfile: ${{ fromJSON(needs.find_containerfiles.outputs.files) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set image name
+        run: echo "IMAGE_NAME=${{ inputs.runtime }}.$( echo ${{ matrix.containerfile }} | sed -r 's/(.containerfile)$//' )" >> $GITHUB_ENV
+
+      # https://www.redhat.com/en/blog/build-ubi-containers-github-actions-buildah-and-podman
+      - name: Build containerfile ${{ matrix.containerfile }} for runtime ${{ inputs.runtime }}
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: runtime/${{ env.IMAGE_NAME }}
+          tags: latest ${{ github.ref_name }} ${{ github.sha }}
+          containerfiles: ${{ inputs.track }}/${{ inputs.runtime }}/${{ matrix.containerfile }}
+          build-args: |
+            THIS_DIR=${{ inputs.track }}/${{ inputs.runtime }}
+
+      - name: Log in to ${{ env.REGISTRY }}
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+      
+      - name: Push to ${{ env.REGISTRY }}
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
