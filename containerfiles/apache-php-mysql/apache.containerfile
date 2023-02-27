@@ -1,6 +1,7 @@
 FROM docker.io/library/httpd:2-alpine3.17
 
 VOLUME [ "/var/www/html" ]
+EXPOSE 80
 
 RUN apk upgrade --no-cache
 
