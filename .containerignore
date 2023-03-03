@@ -1,2 +1,6 @@
-/Containerfile
-/studentbox
+/cli.containerfile
+/bin
+/README.md
+/examples
+/.vscode
+/.github
