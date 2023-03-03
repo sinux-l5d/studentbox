@@ -1,6 +1,5 @@
 name: Check if new runtimes
 
-# In prod, should be on tag
 on:
   push:
     tags:
@@ -52,6 +51,8 @@ jobs:
           PROCESS="[]"
           for FILE in $CHANGED_FILES; do
             if [[ $FILE == ${{ env.TRACK }}/* ]]; then
+              # Don't consider README.md as change with regex
+              [[ $FILE =~ README.md$ ]] && continue
               echo "run=true" >> $GITHUB_OUTPUT
 
               # Add subfolder to process

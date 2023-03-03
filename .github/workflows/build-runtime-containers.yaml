@@ -73,6 +73,7 @@ jobs:
           image: runtime/${{ env.IMAGE_NAME }}
           tags: latest ${{ github.ref_name }} ${{ github.sha }}
           containerfiles: ${{ inputs.track }}/${{ inputs.runtime }}/${{ matrix.containerfile }}
+          oci: true
           build-args: |
             THIS_DIR=${{ inputs.track }}/${{ inputs.runtime }}
 
