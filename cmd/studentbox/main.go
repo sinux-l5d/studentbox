@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"time"
 
 	"github.com/urfave/cli/v2"
 
@@ -16,6 +15,7 @@ import (
 var (
 	// global flags
 	socket string
+	version = "dev"
 )
 
 func newManager(_ io.Writer, allowedImages map[string]string) (*containers.Manager, error) {
@@ -38,8 +38,7 @@ func main() {
 	app := &cli.App{
 		Name:     "studentbox",
 		Usage:    "Manage Studentbox's containers from the CLI",
-		Version:  "v0.1.0",
-		Compiled: time.Now(),
+		Version:  version,
 		Authors: []*cli.Author{
 			{
 				Name:  "Simon Leonard",
