@@ -1,0 +1,62 @@
+name: Build CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository }}
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # https://www.redhat.com/en/blog/build-ubi-containers-github-actions-buildah-and-podman
+      - name: Build studentbox cli 
+        id: build-image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          image: cli
+          tags: latest ${{ github.ref_name }} ${{ github.sha }}
+          containerfiles: ./cli.containerfile
+          oci: true
+          build-args: |
+            BINARY_NAME=studentbox
+            VERSION=${{ github.ref_name }}
+
+      - name: Log in to ${{ env.REGISTRY }}
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+      
+      - name: Push to ${{ env.REGISTRY }}
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build-image.outputs.image }}
+          tags: ${{ steps.build-image.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+      
+      - name: Extract binary from container
+        run: |
+          mkdir bin
+          podman create --name studentbox ${{ steps.build-image.outputs.image }}:latest
+          podman cp studentbox:/studentbox bin/studentbox
+          podman rm studentbox
+      
+      - name: Upload CLI
+        uses: actions/upload-artifact@v3
+        with:
+          name: studentbox
+          path: ./bin/studentbox
