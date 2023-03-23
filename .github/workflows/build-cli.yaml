@@ -54,6 +54,7 @@ jobs:
           podman create --name studentbox ${{ steps.build-image.outputs.image }}:latest
           podman cp studentbox:/studentbox bin/studentbox
           podman rm studentbox
+          chmod +x bin/studentbox
       
       - name: Upload CLI
         uses: actions/upload-artifact@v3
