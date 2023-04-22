@@ -14,7 +14,7 @@ import (
 
 var (
 	// global flags
-	socket string
+	socket  string
 	version = "dev"
 )
 
@@ -23,11 +23,14 @@ func newManager(_ io.Writer, allowedImages map[string]string) (*containers.Manag
 		allowedImages = map[string]string{}
 	}
 
-	return containers.NewManager(&containers.ManagerOptions{
-		SocketPath:    socket,
-		Logger:        log.New(io.Discard, "", log.Flags()),
-		AllowedImages: allowedImages,
-	})
+	opt := containers.DefaultManagerOptions()
+	opt.SocketPath = socket
+	opt.AllowedImages = allowedImages
+	// get abs current dir
+	pwd, _ := os.Getwd()
+	opt.HostPath = pwd
+	opt.Logger = log.New(io.Discard, "", log.Flags())
+	return containers.NewManager(opt)
 }
 
 // func (app *cli.App) Printf(format string, a ...any) (int, error) {
@@ -36,9 +39,9 @@ func newManager(_ io.Writer, allowedImages map[string]string) (*containers.Manag
 
 func main() {
 	app := &cli.App{
-		Name:     "studentbox",
-		Usage:    "Manage Studentbox's containers from the CLI",
-		Version:  version,
+		Name:    "studentbox",
+		Usage:   "Manage Studentbox's containers from the CLI",
+		Version: version,
 		Authors: []*cli.Author{
 			{
 				Name:  "Simon Leonard",
@@ -144,12 +147,27 @@ func main() {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					manager, err := newManager(c.App.Writer, map[string]string{"cli": c.String("image")})
+					manager, err := newManager(c.App.Writer, map[string]string{"busybox": c.String("image")})
 					if err != nil {
 						return err
 					}
 
-					return manager.SpawnContainer(c.String("user"), c.String("project"), "cli")
+					opt := containers.PodOptions{
+						User:    c.String("user"),
+						Project: c.String("project"),
+						Containers: []containers.PodContainerOptions{
+							{
+								Image: "busybox",
+								// TODO: get from config or labels
+								Mounts: []string{"/studentbox-dummy"},
+								Envvars: map[string]string{
+									"STUDENTBOX_USER":    c.String("user"),
+									"STUDENTBOX_PROJECT": c.String("project"),
+								},
+							},
+						},
+					}
+					return manager.SpawnPod(&opt)
 				},
 			},
 		},
