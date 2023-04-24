@@ -113,7 +113,7 @@ func getImageConfigFromFile(path string) (*runtimes.Image, error) {
 	shortName := strings.TrimSuffix(filepath.Base(path), ".containerfile")
 	image := &runtimes.Image{
 		ShortName:          shortName,
-		FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/" + runtime + "." + shortName,
+		FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/" + runtime + "." + shortName,
 		Mounts:             make(map[string]string),
 	}
 	// extract labels from content

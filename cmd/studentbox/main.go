@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/sinux-l5d/studentbox/internal/containers"
+	"github.com/sinux-l5d/studentbox/internal/runtimes"
 )
 
 var (
@@ -18,18 +19,17 @@ var (
 	version = "dev"
 )
 
-func newManager(_ io.Writer, allowedImages map[string]string) (*containers.Manager, error) {
-	if allowedImages == nil {
-		allowedImages = map[string]string{}
-	}
-
+func newManager(w io.Writer) (*containers.Manager, error) {
 	opt := containers.DefaultManagerOptions()
 	opt.SocketPath = socket
-	opt.AllowedImages = allowedImages
 	// get abs current dir
 	pwd, _ := os.Getwd()
 	opt.HostPath = pwd
-	opt.Logger = log.New(io.Discard, "", log.Flags())
+	if w == nil {
+		opt.Logger = log.New(io.Discard, "", log.Flags())
+	} else {
+		opt.Logger = log.New(w, "[containers] ", log.Flags())
+	}
 	return containers.NewManager(opt)
 }
 
@@ -63,7 +63,7 @@ func main() {
 				Aliases: []string{"ls"},
 				Usage:   "List containers belonging to Studentbox",
 				Action: func(c *cli.Context) error {
-					manager, err := newManager(c.App.Writer, nil)
+					manager, err := newManager(nil)
 					if err != nil {
 						return err
 					}
@@ -102,7 +102,7 @@ func main() {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					manager, err := newManager(c.App.Writer, nil)
+					manager, err := newManager(nil)
 					if err != nil {
 						return err
 					}
@@ -140,14 +140,10 @@ func main() {
 						Aliases:  []string{"p"},
 						Required: true,
 					},
-					&cli.StringFlag{
-						Name:    "image",
-						Aliases: []string{"i"},
-						Value:   "docker.io/library/busybox",
-					},
 				},
 				Action: func(c *cli.Context) error {
-					manager, err := newManager(c.App.Writer, map[string]string{"busybox": c.String("image")})
+					// manager, err := newManager(c.App.Writer, map[string]string{"busybox": c.String("image")})
+					manager, err := newManager(c.App.Writer)
 					if err != nil {
 						return err
 					}
@@ -155,17 +151,19 @@ func main() {
 					opt := containers.PodOptions{
 						User:    c.String("user"),
 						Project: c.String("project"),
-						Containers: []containers.PodContainerOptions{
-							{
-								Image: "busybox",
-								// TODO: get from config or labels
-								Mounts: []string{"/studentbox-dummy"},
-								Envvars: map[string]string{
-									"STUDENTBOX_USER":    c.String("user"),
-									"STUDENTBOX_PROJECT": c.String("project"),
-								},
-							},
-						},
+						Runtime: runtimes.OfficialRuntimes["lamp"],
+						// Runtime: runtimes.Runtime{
+						// 	Name: "dummy",
+						// 	Images: map[string]runtimes.Image{
+						// 		"busybox": {
+						// 			ShortName:          "busybox",
+						// 			FullyQualifiedName: "docker.io/library/busybox",
+						// 			Mounts: map[string]string{
+						// 				"dummy-host": "/dummy-container",
+						// 			},
+						// 		},
+						// 	},
+						// },
 					}
 					return manager.SpawnPod(&opt)
 				},

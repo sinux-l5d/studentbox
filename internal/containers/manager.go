@@ -15,7 +15,8 @@ import (
 	"github.com/containers/podman/v4/pkg/bindings/pods"
 	"github.com/containers/podman/v4/pkg/domain/entities"
 	"github.com/containers/podman/v4/pkg/specgen"
-	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sinux-l5d/studentbox/internal/runtimes"
+	"github.com/sinux-l5d/studentbox/internal/tools"
 )
 
 // Object handling containers creation and retrieving.
@@ -26,7 +27,6 @@ type Manager struct {
 	hostPath   string
 	dataPath   string
 	log        *log.Logger
-	images     map[string]string
 }
 
 // Option when creating a Manager
@@ -38,8 +38,6 @@ type ManagerOptions struct {
 	// Note that HostPath + DataPath is the absolute path of data directory on host
 	DataPath string
 	Logger   *log.Logger
-	// Images allowed. The key is the identifier, value is full name (e.g. docker.io/library/busybox)
-	AllowedImages map[string]string
 }
 
 const (
@@ -69,10 +67,9 @@ func DefaultManagerOptions() *ManagerOptions {
 		sockDir = "/tmp"
 	}
 	return &ManagerOptions{
-		SocketPath:    "unix://" + sockDir + "/podman/podman.sock",
-		DataPath:      "./data",
-		Logger:        log.New(os.Stdout, "[containers] ", log.LstdFlags),
-		AllowedImages: map[string]string{},
+		SocketPath: "unix://" + sockDir + "/podman/podman.sock",
+		DataPath:   "./data",
+		Logger:     log.New(os.Stdout, "[containers] ", log.LstdFlags),
 	}
 }
 
@@ -88,17 +85,9 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 		return nil, err
 	}
 
-	if len(opt.AllowedImages) == 0 {
-		opt.Logger.Println("WARN: no images allowed has been set")
-	}
-
 	// test opt.DataPath is a writable directory, create it if don't exist
-	if _, err := os.Stat(opt.DataPath); os.IsNotExist(err) {
-		err = os.MkdirAll(opt.DataPath, 0755)
-		if err != nil {
-			return nil, err
-		}
-	}
+	// Relative because can be in container
+	tools.EnsureDirCreated(opt.DataPath)
 
 	if opt.HostPath == "" || !path.IsAbs(opt.HostPath) {
 		return nil, errors.New("host path must be an absolute path, current value: \"" + opt.HostPath + "\"")
@@ -110,7 +99,6 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 		log:        opt.Logger,
 		hostPath:   opt.HostPath,
 		dataPath:   opt.DataPath,
-		images:     opt.AllowedImages,
 	}, nil
 }
 
@@ -145,11 +133,6 @@ func (m *Manager) ContainerExists(user, project string) (bool, error) {
 
 // Check image is allowed and pull it if not exists locally
 func (m *Manager) PullImageIfNotExists(image string) error {
-	image, ok := m.images[image]
-	if !ok {
-		return errors.New("image " + image + " is not in allowed images")
-	}
-
 	exists, err := images.Exists(*m.ctx, image, nil)
 	if err != nil {
 		return err
@@ -231,38 +214,10 @@ func (m Manager) toHostPath(relativePath string) string {
 	return filepath.Join(m.hostPath, m.dataPath, relativePath)
 }
 
-type PodContainerOptions struct {
-	Image   string            // image name
-	Mounts  []string          // absolute path in container
-	Envvars map[string]string // envvar name and value
-}
-
 type PodOptions struct {
-	User       string
-	Project    string
-	Containers []PodContainerOptions
-}
-
-func (opt PodContainerOptions) toContainerSpec(toProjectHostPath func(string) string) *specgen.SpecGenerator {
-	spec := specgen.NewSpecGenerator(opt.Image, false)
-	spec.Terminal = true
-	spec.Name = opt.Image
-	spec.Labels = map[string]string{
-		L_IS_OWNED: "true",
-	}
-	spec.Env = opt.Envvars
-
-	for _, volume := range opt.Mounts {
-		// May break if two mounts have the same directory name
-		dirName := filepath.Base(volume)
-		spec.Mounts = append(spec.Mounts, specs.Mount{
-			Destination: volume,
-			Source:      toProjectHostPath(dirName),
-			Type:        "bind",
-		})
-	}
-
-	return spec
+	User    string
+	Project string
+	Runtime runtimes.Runtime
 }
 
 func (m *Manager) SpawnPod(opt *PodOptions) error {
@@ -285,8 +240,8 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 
 	m.log.Printf("INFO: Created pod %s", podCreateResponse.Id)
 
-	for _, container := range opt.Containers {
-		err = m.SpawnContainerInPod(podCreateResponse.Id, &container, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, container.Image))
+	for _, image := range opt.Runtime.Images {
+		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName))
 		if err != nil {
 			force := true
 			m.log.Printf("ERROR: Failed to spawn container in pod, removing pod: %s", err)
@@ -298,16 +253,26 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	return nil
 }
 
-func (m *Manager) SpawnContainerInPod(podID string, containerOptions *PodContainerOptions, containerName string) error {
-	err := m.PullImageIfNotExists(containerOptions.Image)
+func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, containerName string) error {
+	err := m.PullImageIfNotExists(img.FullyQualifiedName)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
-	spec := containerOptions.toContainerSpec(func(path string) string {
-		return m.toHostPath(filepath.Join(containerName, path))
-	})
+	// use container name as dir for data
+	spec := img.ToContainerSpec(m.toHostPath(containerName))
 	spec.Pod = podID
+	spec.Name = containerName
+	spec.Labels = map[string]string{
+		L_IS_OWNED: "true",
+	}
+
+	for name := range img.Mounts {
+		err := tools.EnsureDirCreated(filepath.Join(m.dataPath, containerName, name))
+		if err != nil {
+			return fmt.Errorf("failed to create dir for mount: %w", err)
+		}
+	}
 
 	r, err := containers.CreateWithSpec(*m.ctx, spec, nil)
 	if err != nil {

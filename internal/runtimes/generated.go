@@ -6,21 +6,21 @@ var OfficialRuntimes = map[string]Runtime{
 		Name: "lamp",
 		Images: map[string]Image{
 			"apache": {
-				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/lamp.apache",
+				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/lamp.apache",
 				ShortName:          "apache",
 				Mounts: map[string]string{
 					"html": "/var/www/html",
 				},
 			},
 			"mysql": {
-				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/lamp.mysql",
+				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/lamp.mysql",
 				ShortName:          "mysql",
 				Mounts: map[string]string{
 					"db": "/var/lib/mysql",
 				},
 			},
 			"php": {
-				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/lamp.php",
+				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/lamp.php",
 				ShortName:          "php",
 				Mounts: map[string]string{
 					"html": "/var/www/html",
