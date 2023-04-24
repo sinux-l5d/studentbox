@@ -241,7 +241,7 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	m.log.Printf("INFO: Created pod %s", podCreateResponse.Id)
 
 	for _, image := range opt.Runtime.Images {
-		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName))
+		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName), opt.User+"/"+opt.Project)
 		if err != nil {
 			force := true
 			m.log.Printf("ERROR: Failed to spawn container in pod, removing pod: %s", err)
@@ -253,22 +253,23 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	return nil
 }
 
-func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, containerName string) error {
+func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, containerName string, relativeProjectDir string) error {
 	err := m.PullImageIfNotExists(img.FullyQualifiedName)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
-	// use container name as dir for data
-	spec := img.ToContainerSpec(m.toHostPath(containerName))
+	// create specs with project directory
+	spec := img.ToContainerSpec(m.toHostPath(relativeProjectDir))
 	spec.Pod = podID
 	spec.Name = containerName
 	spec.Labels = map[string]string{
 		L_IS_OWNED: "true",
 	}
 
+	// be sure that all mounts are created
 	for name := range img.Mounts {
-		err := tools.EnsureDirCreated(filepath.Join(m.dataPath, containerName, name))
+		err := tools.EnsureDirCreated(filepath.Join(m.dataPath, relativeProjectDir, name))
 		if err != nil {
 			return fmt.Errorf("failed to create dir for mount: %w", err)
 		}
