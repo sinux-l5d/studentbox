@@ -11,6 +11,8 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					"html": "/var/www/html",
 				},
+				EnvVar: []*EnvVar{
+				},
 			},
 			"mysql": {
 				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/lamp.mysql",
@@ -18,12 +20,45 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					"db": "/var/lib/mysql",
 				},
+				EnvVar: []*EnvVar{
+					{
+						Name: "MARIADB_DATABASE",
+						DefaultValue: "app",
+						Modifiers: []EnvModifierParams{
+							{
+								Name: "failempty",
+								Params: []string{
+								},
+							},
+						},
+					},
+					{
+						Name: "MARIADB_USER",
+						DefaultValue: "student",
+						Modifiers: []EnvModifierParams{
+						},
+					},
+					{
+						Name: "MARIADB_PASSWORD",
+						DefaultValue: "",
+						Modifiers: []EnvModifierParams{
+							{
+								Name: "password",
+								Params: []string{
+									"30",
+								},
+							},
+						},
+					},
+				},
 			},
 			"php": {
 				FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/lamp.php",
 				ShortName:          "php",
 				Mounts: map[string]string{
 					"html": "/var/www/html",
+				},
+				EnvVar: []*EnvVar{
 				},
 			},
 		},

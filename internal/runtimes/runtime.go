@@ -13,6 +13,7 @@ type Image struct {
 	ShortName          string
 	// key is a single directory name, value is the full path container side
 	Mounts map[string]string
+	EnvVar []*EnvVar
 }
 
 // Define config for a runtime

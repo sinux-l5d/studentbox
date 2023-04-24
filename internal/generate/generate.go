@@ -5,10 +5,8 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -47,6 +45,26 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					{{- range $key, $value := .Mounts }}
 					"{{ $key }}": "{{ $value }}",
+					{{- end }}
+				},
+				EnvVar: []*EnvVar{
+					{{- range .EnvVar }}
+					{
+						Name: "{{ .Name }}",
+						DefaultValue: "{{ .DefaultValue }}",
+						Modifiers: []EnvModifierParams{
+							{{- range .Modifiers }}
+							{
+								Name: "{{ .Name }}",
+								Params: []string{
+									{{- range .Params }}
+									"{{ . }}",
+									{{- end }}
+								},
+							},
+							{{- end }}
+						},
+					},
 					{{- end }}
 				},
 			},
@@ -90,46 +108,14 @@ func generateRuntimes() {
 		}
 	}
 
+	// print toTemplate as json
+	// b, err := json.MarshalIndent(forTemplate, "", "  ")
+	// die(err)
+	// fmt.Println(string(b))
+	// _ = tmpl
+
 	f, err := os.Create("../runtimes/generated.go")
 	die(err)
 	defer f.Close()
 	tmpl.Execute(f, forTemplate)
-}
-
-func getImageConfigFromFile(path string) (*runtimes.Image, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	// extract content of file
-	contentBytes, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	runtime := filepath.Base(filepath.Dir(path))
-	shortName := strings.TrimSuffix(filepath.Base(path), ".containerfile")
-	image := &runtimes.Image{
-		ShortName:          shortName,
-		FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/" + runtime + "." + shortName,
-		Mounts:             make(map[string]string),
-	}
-	// extract labels from content
-	labels, err := extractLabelsFromDockerfile(string(contentBytes))
-	die(err)
-	for k, v := range labels {
-		switch k {
-		case "studentbox.config.mounts":
-			// split mounts
-			mounts := strings.Split(v, ",")
-			// split each mount into key and value
-			for _, mount := range mounts {
-				mountSplit := strings.Split(mount, ":")
-				image.Mounts[mountSplit[0]] = mountSplit[1]
-			}
-		}
-	}
-	return image, nil
 }
