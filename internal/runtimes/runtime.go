@@ -13,7 +13,7 @@ type Image struct {
 	ShortName          string
 	// key is a single directory name, value is the full path container side
 	Mounts map[string]string
-	EnvVar []*EnvVar
+	EnvVars []*EnvVar
 }
 
 // Define config for a runtime
@@ -39,9 +39,10 @@ func (r Runtime) MountNames() []string {
 	return keys
 }
 
-func (i Image) ToContainerSpec(basePath string) *specgen.SpecGenerator {
+func (i Image) ToContainerSpec(basePath string, inputEnvVar map[string]string) (*specgen.SpecGenerator, error) {
 	spec := specgen.NewSpecGenerator(i.FullyQualifiedName, false)
 	spec.Terminal = true
+	spec.Env = make(map[string]string)
 
 	for name, path := range i.Mounts {
 		// May break if two mounts have the same directory name
@@ -52,5 +53,31 @@ func (i Image) ToContainerSpec(basePath string) *specgen.SpecGenerator {
 		})
 	}
 
-	return spec
+	// Firstly add all env vars from user input
+	for name, value := range inputEnvVar {
+		spec.Env[name] = value
+	}
+
+	// Set env vars from runtime, using input env vars as modifier parameters
+	// If no input env vars are provided, use the default value
+	for _, env := range i.EnvVars {
+		input, exists := inputEnvVar[env.Name]
+
+		var envValue string
+		var err error
+
+		if exists {
+			envValue, err = env.ApplyModifiersWithInput(&input)
+		} else {
+			envValue, err = env.ApplyModifiers()
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		spec.Env[env.Name] = envValue
+	}
+
+	return spec, nil
 }

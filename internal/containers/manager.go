@@ -146,6 +146,7 @@ func (m *Manager) PullImageIfNotExists(image string) error {
 	return err
 }
 
+// need cleanup, deprecated
 func (m *Manager) SpawnContainer(user, project, imageName string) error {
 	exists, err := m.ContainerExists(user, project)
 	if err != nil {
@@ -217,6 +218,8 @@ func (m Manager) toHostPath(relativePath string) string {
 type PodOptions struct {
 	User    string
 	Project string
+	// Environment variables to pass to ALL containers
+	InputEnvVars map[string]string
 	Runtime runtimes.Runtime
 }
 
@@ -241,7 +244,7 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	m.log.Printf("INFO: Created pod %s", podCreateResponse.Id)
 
 	for _, image := range opt.Runtime.Images {
-		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName), opt.User+"/"+opt.Project)
+		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, opt.InputEnvVars, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName), opt.User+"/"+opt.Project)
 		if err != nil {
 			force := true
 			m.log.Printf("ERROR: Failed to spawn container in pod, removing pod: %s", err)
@@ -253,14 +256,17 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	return nil
 }
 
-func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, containerName string, relativeProjectDir string) error {
+func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEnvVar map[string]string, containerName string, relativeProjectDir string) error {
 	err := m.PullImageIfNotExists(img.FullyQualifiedName)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
 	// create specs with project directory
-	spec := img.ToContainerSpec(m.toHostPath(relativeProjectDir))
+	spec, err := img.ToContainerSpec(m.toHostPath(relativeProjectDir), inputEnvVar)
+	if err != nil {
+		return fmt.Errorf("failed to create container spec: %w", err)
+	}
 	spec.Pod = podID
 	spec.Name = containerName
 	spec.Labels = map[string]string{

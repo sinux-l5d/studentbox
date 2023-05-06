@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -127,8 +128,8 @@ func main() {
 				},
 			},
 			{
-				Name:   "spawn-dummy",
-				Hidden: true,
+				Name:   "spawn",
+				Usage: "Spawn a runtime (pod of container) for a project",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "user",
@@ -140,18 +141,50 @@ func main() {
 						Aliases:  []string{"p"},
 						Required: true,
 					},
+					&cli.StringFlag{
+						Name: "runtime",
+						Aliases: []string{"r"},
+						Required: true,
+					},
+					&cli.StringSliceFlag{
+						Name: "env",
+						Aliases: []string{"e"},
+						Usage: "Set environment variables (e.g. -e FOO=bar)",
+						Action: func(_ *cli.Context, v []string) error {
+							for _, value := range v {
+								if !strings.Contains(value, "=") || strings.HasPrefix(value, "=") || strings.HasSuffix(value, "="){
+									return fmt.Errorf("invalid environment variable %s", value)
+								}
+							}
+							return nil
+						},
+					},
 				},
 				Action: func(c *cli.Context) error {
-					// manager, err := newManager(c.App.Writer, map[string]string{"busybox": c.String("image")})
 					manager, err := newManager(c.App.Writer)
 					if err != nil {
 						return err
 					}
 
+					runtime, exists := runtimes.OfficialRuntimes[c.String("runtime")]
+					if !exists {
+						return fmt.Errorf("runtime %s doesn't exist", c.String("runtime"))
+					}
+
+					envvar := make(map[string]string, len(c.StringSlice("env")))
+					for _, value := range c.StringSlice("env") {
+						split := strings.SplitN(value, "=", 2)
+						if len(split) != 2 {
+							return fmt.Errorf("invalid environment variable %s", value)
+						}
+						envvar[split[0]] = split[1]
+					}
+
 					opt := containers.PodOptions{
 						User:    c.String("user"),
 						Project: c.String("project"),
-						Runtime: runtimes.OfficialRuntimes["lamp"],
+						InputEnvVars: envvar,
+						Runtime: runtime,
 						// Runtime: runtimes.Runtime{
 						// 	Name: "dummy",
 						// 	Images: map[string]runtimes.Image{

@@ -30,7 +30,7 @@ func getImageConfigFromFile(path string) (*runtimes.Image, error) {
 		ShortName:          shortName,
 		FullyQualifiedName: "ghcr.io/sinux-l5d/studentbox/runtime/" + runtime + "." + shortName,
 		Mounts:             make(map[string]string),
-		EnvVar:             make([]*runtimes.EnvVar, 0),
+		EnvVars:             make([]*runtimes.EnvVar, 0),
 	}
 	// extract labels from content
 	labels, err := extractLabelsFromDockerfile(string(contentBytes))
@@ -51,7 +51,7 @@ func getImageConfigFromFile(path string) (*runtimes.Image, error) {
 			die(err)
 			envvars, err := parseEnvConfig(value, defaultsValues)
 			die(err)
-			image.EnvVar = envvars
+			image.EnvVars = envvars
 		}
 
 	}

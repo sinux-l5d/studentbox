@@ -11,7 +11,7 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					"html": "/var/www/html",
 				},
-				EnvVar: []*EnvVar{
+				EnvVars: []*EnvVar{
 				},
 			},
 			"mysql": {
@@ -20,7 +20,7 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					"db": "/var/lib/mysql",
 				},
-				EnvVar: []*EnvVar{
+				EnvVars: []*EnvVar{
 					{
 						Name: "MARIADB_DATABASE",
 						DefaultValue: "app",
@@ -36,10 +36,27 @@ var OfficialRuntimes = map[string]Runtime{
 						Name: "MARIADB_USER",
 						DefaultValue: "student",
 						Modifiers: []EnvModifierParams{
+							{
+								Name: "failempty",
+								Params: []string{
+								},
+							},
 						},
 					},
 					{
 						Name: "MARIADB_PASSWORD",
+						DefaultValue: "",
+						Modifiers: []EnvModifierParams{
+							{
+								Name: "password",
+								Params: []string{
+									"10",
+								},
+							},
+						},
+					},
+					{
+						Name: "MARIADB_ROOT_PASSWORD",
 						DefaultValue: "",
 						Modifiers: []EnvModifierParams{
 							{
@@ -58,7 +75,7 @@ var OfficialRuntimes = map[string]Runtime{
 				Mounts: map[string]string{
 					"html": "/var/www/html",
 				},
-				EnvVar: []*EnvVar{
+				EnvVars: []*EnvVar{
 				},
 			},
 		},

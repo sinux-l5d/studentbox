@@ -47,8 +47,8 @@ var OfficialRuntimes = map[string]Runtime{
 					"{{ $key }}": "{{ $value }}",
 					{{- end }}
 				},
-				EnvVar: []*EnvVar{
-					{{- range .EnvVar }}
+				EnvVars: []*EnvVar{
+					{{- range .EnvVars }}
 					{
 						Name: "{{ .Name }}",
 						DefaultValue: "{{ .DefaultValue }}",

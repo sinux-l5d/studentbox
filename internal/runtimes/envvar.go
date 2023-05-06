@@ -39,12 +39,12 @@ var EnvModifiers = map[string]EnvModifier{
 	"failempty": &FailEmptyModifier{},
 }
 
-// Apply modifiers to env var with default value
+// Compute the value of an env var by applying modifiers
 func (e EnvVar) ApplyModifiers() (string, error) {
 	return e.ApplyModifiersWithInput(nil)
 }
 
-// Apply modifiers to env var with input value
+// Compute the value of an env var by applying modifiers to the input value
 func (e EnvVar) ApplyModifiersWithInput(inputValue *string) (string, error) {
 	var err error
 	value := e.DefaultValue
