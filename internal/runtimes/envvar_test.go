@@ -130,6 +130,24 @@ func TestEnvVarApplyModifiers(t *testing.T) {
 	}
 }
 
+// write benchmark for modifiers
+func BenchmarkEnvVarApplyModifiers(b *testing.B) {
+	envVar := runtimes.EnvVar{
+		Name:         "MARIADB_PASSWORD",
+		DefaultValue: "",
+		Modifiers: []runtimes.EnvModifierParams{
+			{
+				Name:   "password",
+				Params: []string{"30"},
+			},
+		},
+	}
+	for i := 0; i < b.N; i++ {
+		_, _ = envVar.ApplyModifiersWithInput(nil)
+	}
+}
+
+
 func TestModifierPassword(t *testing.T) {
 	lengths := []int{0, 30}
 	for _, l := range lengths {
