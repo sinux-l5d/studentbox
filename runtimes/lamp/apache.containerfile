@@ -1,7 +1,9 @@
 FROM docker.io/library/httpd:2-alpine3.17
-ARG THIS_DIR
+# The github workflow don't build from the same place
+ARG THIS_DIR .
 
-VOLUME [ "/var/www/html" ]
+# mounts is in format "dirname-datapath:containerpath"
+LABEL studentbox.config.mounts="html:/var/www/html"
 EXPOSE 80
 
 RUN apk upgrade --no-cache
