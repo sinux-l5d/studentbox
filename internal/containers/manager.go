@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/containers/common/libnetwork/types"
 	"github.com/containers/podman/v4/pkg/bindings"
 	"github.com/containers/podman/v4/pkg/bindings/containers"
 	"github.com/containers/podman/v4/pkg/bindings/images"
@@ -220,7 +221,7 @@ type PodOptions struct {
 	Project string
 	// Environment variables to pass to ALL containers
 	InputEnvVars map[string]string
-	Runtime runtimes.Runtime
+	Runtime      runtimes.Runtime
 }
 
 func (m *Manager) SpawnPod(opt *PodOptions) error {
@@ -231,6 +232,7 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 		L_USER:     opt.User,
 		L_PROJECT:  opt.Project,
 	}
+	podSpecGen.PortMappings = append(podSpecGen.PortMappings, types.PortMapping{ContainerPort: 80})
 
 	podSpec := entities.PodSpec{
 		PodSpecGen: *podSpecGen,
