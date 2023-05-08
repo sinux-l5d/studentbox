@@ -1,5 +1,6 @@
 /cli.containerfile
 /bin
+/data
 /README.md
 /examples
 /.vscode

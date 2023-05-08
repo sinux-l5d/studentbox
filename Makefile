@@ -4,8 +4,11 @@ ENTRYPOINT ?= ./cmd/$(BINARY_NAME)/main.go
 LIB_TAGS = remote exclude_graphdriver_btrfs btrfs_noversion exclude_graphdriver_devicemapper containers_image_openpgp
 VERSION ?= $(shell git describe --tags --always --dirty)
 
+.PHONY: build-dev
+build-dev: generate build
+
 .PHONY: build
-build: generate
+build:
 	@echo "Building $(BINARY_NAME)..."
 	go build -tags "$(LIB_TAGS)" -ldflags '-X main.version=$(VERSION)' -o ./bin/$(BINARY_NAME) -v $(ENTRYPOINT)
 
