@@ -2,7 +2,7 @@
 
 echo "Today is " . date("Y-m-d") . "\n";
 
-$c = mysqli_connect("127.0.0.1:3306", "user-name", "testtest", "project-name");
+$c = mysqli_connect("127.0.0.1:3306", "student", "password", "app");
 
 if ($c -> connect_errno) {
   echo "Failed to connect to MySQL: " . $c -> connect_error . "\n";
