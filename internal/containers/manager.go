@@ -103,7 +103,7 @@ func NewManager(opt *ManagerOptions) (*Manager, error) {
 	}, nil
 }
 
-func (m *Manager) Containers() ([]*Container, error) {
+func (m *Manager) GetAllContainers() ([]*Container, error) {
 	cs, err := containers.List(*m.ctx, &containers.ListOptions{
 		// Only containers managed by this lib
 		Filters: map[string][]string{
@@ -124,8 +124,8 @@ func (m *Manager) Containers() ([]*Container, error) {
 	return containers, nil
 }
 
-func (m *Manager) ContainerExists(user, project string) (bool, error) {
-	exists, err := containers.Exists(*m.ctx, user+"-"+project, nil)
+func (m *Manager) PodExists(user, project string) (bool, error) {
+	exists, err := pods.Exists(*m.ctx, PREFIX+user+"-"+project, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to check if container exists: %w", err)
 	}
@@ -147,56 +147,10 @@ func (m *Manager) PullImageIfNotExists(image string) error {
 	return err
 }
 
-// need cleanup, deprecated
-func (m *Manager) SpawnContainer(user, project, imageName string) error {
-	exists, err := m.ContainerExists(user, project)
-	if err != nil {
-		// Wrap error
-		return err
-	}
-	if exists {
-		return errors.New("container already exists")
-	}
-
-	err = m.PullImageIfNotExists(imageName)
-	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
-	}
-
-	spec := specgen.NewSpecGenerator(imageName, false)
-	spec.Terminal = true
-	spec.Name = PREFIX + user + "-" + project
-	spec.Labels = map[string]string{
-		L_IS_OWNED: "true",
-		L_USER:     user,
-		L_PROJECT:  project,
-	}
-
-	r, err := containers.CreateWithSpec(*m.ctx, spec, nil)
-	if err != nil {
-		return err
-	}
-
-	m.log.Println("INFO: Created container", r.ID)
-
-	if len(r.Warnings) > 0 {
-		m.log.Println("WARN:", r.Warnings)
-	}
-
-	err = containers.Start(*m.ctx, r.ID, nil)
-	if err != nil {
-		m.log.Println("ERROR: Failed to start container, rolling back: ", err)
-		force := true
-		containers.Remove(*m.ctx, r.ID, &containers.RemoveOptions{Force: &force})
-		return err
-	}
-	return nil
-}
-
 // Get a container by name of user and project
 // might return nil
-func (m *Manager) GetContainer(user, project string) (*Container, error) {
-	exists, err := m.ContainerExists(user, project)
+func (m *Manager) GetContainers(user, project string) ([]*Container, error) {
+	exists, err := m.PodExists(user, project)
 	if err != nil {
 		return nil, err
 	}
@@ -204,12 +158,23 @@ func (m *Manager) GetContainer(user, project string) (*Container, error) {
 		return nil, &ErrContainerDontExists{User: user, Project: project}
 	}
 
-	return &Container{
-		ctx:     *m.ctx,
-		Name:    user + "-" + project,
-		User:    user,
-		Project: project,
-	}, nil
+	// Get all containers
+	cs, err := containers.List(*m.ctx, &containers.ListOptions{
+		Filters: map[string][]string{
+			"label": {L_IS_OWNED + "=true", L_USER + "=" + user, L_PROJECT + "=" + project},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to []*Container
+	containers := make([]*Container, len(cs))
+	for i, container := range cs {
+		containers[i] = NewFromListContainer(*m.ctx, container)
+	}
+
+	return containers, nil
 }
 
 func (m Manager) toHostPath(relativePath string) string {
@@ -246,7 +211,7 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	m.log.Printf("INFO: Created pod %s", podCreateResponse.Id)
 
 	for _, image := range opt.Runtime.Images {
-		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, opt.InputEnvVars, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName), opt.User+"/"+opt.Project)
+		err = m.SpawnContainerInPod(podCreateResponse.Id, &image, opt.InputEnvVars, fmt.Sprintf("%s-%s-%s", PREFIX+opt.User, opt.Project, image.ShortName), opt.User, opt.Project)
 		if err != nil {
 			force := true
 			m.log.Printf("ERROR: Failed to spawn container in pod, removing pod: %s", err)
@@ -258,11 +223,13 @@ func (m *Manager) SpawnPod(opt *PodOptions) error {
 	return nil
 }
 
-func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEnvVar map[string]string, containerName string, relativeProjectDir string) error {
+func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEnvVar map[string]string, containerName string, user string, project string) error {
 	err := m.PullImageIfNotExists(img.FullyQualifiedName)
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
+
+	relativeProjectDir := filepath.Join(user, project)
 
 	// create specs with project directory
 	spec, err := img.ToContainerSpec(m.toHostPath(relativeProjectDir), inputEnvVar)
@@ -273,6 +240,8 @@ func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEn
 	spec.Name = containerName
 	spec.Labels = map[string]string{
 		L_IS_OWNED: "true",
+		L_USER:     user,
+		L_PROJECT:  project,
 	}
 
 	// be sure that all mounts are created

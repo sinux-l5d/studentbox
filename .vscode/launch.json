@@ -16,6 +16,21 @@
             ]
         },
         {
+            "name": "CLI: Status project",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "cmd/studentbox",
+            "env": {},
+            "args": [
+                "status",
+                "--user",
+                "dummy",
+                "--project",
+                "dummy"
+            ]
+        },
+        {
             "name": "CLI: Spawn dummy",
             "type": "go",
             "request": "launch",
@@ -23,11 +38,13 @@
             "program": "cmd/studentbox",
             "env": {},
             "args": [
-                "spawn-dummy",
+                "spawn",
                 "--user",
                 "dummy",
                 "--project",
                 "dummy",
+                "--runtime",
+                "lamp"
             ]
         }
     ]

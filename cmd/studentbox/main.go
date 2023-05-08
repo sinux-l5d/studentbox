@@ -69,7 +69,7 @@ func main() {
 						return err
 					}
 
-					containers, err := manager.Containers()
+					containers, err := manager.GetAllContainers()
 					if err != nil {
 						return err
 					}
@@ -79,9 +79,9 @@ func main() {
 						return nil
 					}
 
-					fmt.Fprintln(c.App.Writer, "Containers (user/project):")
+					fmt.Fprintln(c.App.Writer, "Containers:")
 					for _, container := range containers {
-						fmt.Fprintf(c.App.Writer, "- %s/%s\n", container.User, container.Project)
+						fmt.Fprintf(c.App.Writer, "- %s (%s/%s)\n", container.Name, container.User, container.Project)
 					}
 
 					return nil
@@ -89,7 +89,7 @@ func main() {
 			},
 			{
 				Name:  "status",
-				Usage: "Print status of a project's container",
+				Usage: "Print status of a project's runtime",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "user",
@@ -108,7 +108,7 @@ func main() {
 						return err
 					}
 					user, project := c.String("user"), c.String("project")
-					container, err := manager.GetContainer(user, project)
+					cntnrs, err := manager.GetContainers(user, project)
 					if err != nil {
 						if errors.Is(err, &containers.ErrContainerDontExists{}) {
 							fmt.Fprintf(c.App.ErrWriter, "container for user %s, project %s doesn't exist\n", user, project)
@@ -116,13 +116,20 @@ func main() {
 							return err
 						}
 					}
-
-					status, err := container.Status()
-					if err != nil {
-						return err
+					
+					status := make(map[string]string)
+					for _, container := range cntnrs {
+						s, err := container.Status()
+						if err != nil {
+							return err
+						}
+						status[container.Name] = s
 					}
 
-					fmt.Fprintf(c.App.Writer, "Status of %s: %s\n", container.Name, status)
+					fmt.Fprintf(c.App.Writer, "Status of project %s/%s:\n", user, project)
+					for name, s := range status {
+						fmt.Fprintf(c.App.Writer, "- %s: %s\n", name, s)
+					}
 
 					return nil
 				},
