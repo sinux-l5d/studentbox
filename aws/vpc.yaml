@@ -1,0 +1,137 @@
+Parameters:
+
+  LinuxImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/debian/release/11/latest/amd64
+  
+  BaseName:
+    Type: String
+    Default: "STUDENTBOX"
+    Description: "Base name for all resources"
+  
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instances"
+
+Resources:
+  
+  Vpc:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub ${BaseName}_VPC
+
+  Gateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${BaseName}_GATEWAY
+
+  GatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      InternetGatewayId: !Ref Gateway
+      VpcId: !Ref Vpc
+
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${BaseName}_ROUTE_TABLE
+  
+  Route:
+    Type: 'AWS::EC2::Route'
+    DependsOn: Gateway
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref Gateway
+  
+  Subnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${BaseName}_SUBNET_1
+
+  SubnetRouteTableAttachment:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref Subnet
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref Vpc
+      GroupDescription: allow connections from specified source security group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      SubnetId: !Ref Subnet
+      ImageId: !Ref LinuxImageId
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      KeyName: !Ref KeyName
+      UserData: !Base64 |
+        #!/bin/bash
+        set -e -x -o pipefail
+
+        apt update -y && apt upgrade -y
+        apt install -y gpg
+        source /etc/os-release
+        wget http://downloadcontent.opensuse.org/repositories/home:/alvistack/Debian_$VERSION_ID/Release.key -O alvistack_key
+        cat alvistack_key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/alvistack.gpg >/dev/null
+        echo "deb http://downloadcontent.opensuse.org/repositories/home:/alvistack/Debian_$VERSION_ID/ /" | tee /etc/apt/sources.list.d/alvistack.list
+
+        sudo apt update -y 
+        sudo apt install -y podman slirp4netns fuse-overlayfs uidmap
+
+        # TODO: check /etc/subuid and /etc/subgid
+        echo "In order to get studentbox working, enable podman socket (first time only): systemctl --user enable --now podman.socket" > /etc/motd
+
+        podman create --name studentbox ghcr.io/sinux-l5d/studentbox/cli:latest
+        podman cp studentbox:/studentbox /usr/local/bin/studentbox
+        podman rm -f studentbox
+Outputs:
+
+  VpcId:
+    Value: !Ref Vpc
+    Description: VPC ID
+
+  AZ:
+    Value: !GetAtt
+      - Subnet
+      - AvailabilityZone
+    Description: Subnet AZ
+
+  SubnetId:
+    Value: !Ref Subnet
+    Description: Subnet ID
+
+  PublicIp:
+    Value: !GetAtt Instance.PublicIp
+    Description: Instance Public Ip
