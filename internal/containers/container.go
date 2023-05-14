@@ -50,3 +50,18 @@ func (c *Container) GetEnv() (map[string]string, error) {
 
 	return env, nil
 }
+
+// Return the HostIP and HostPort of the container
+// Works only on infra containers, return empty strings if not found
+func (c *Container) GetPort() (string, string, error) {
+	inspect, err := containers.Inspect(c.ctx, c.Name, &containers.InspectOptions{})
+	if err != nil {
+		return "", "", err
+	}
+
+	config, ok := inspect.HostConfig.PortBindings["80/tcp"]
+	if !ok {
+		return "", "", nil
+	}
+	return config[0].HostIP, config[0].HostPort, nil
+}

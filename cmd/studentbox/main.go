@@ -90,7 +90,12 @@ func main() {
 
 					fmt.Fprintln(c.App.Writer, "Containers:")
 					for _, container := range containers {
-						fmt.Fprintf(c.App.Writer, "- %s (%s/%s)\n", container.Name, container.User, container.Project)
+						ip, port, err := container.GetPort()
+						if err != nil || (ip == "" && port == "") {
+							fmt.Fprintf(c.App.Writer, "- (%s/%s) %s \n", container.User, container.Project, container.Name)
+						} else {
+							fmt.Fprintf(c.App.Writer, "- (%s/%s) %s -> %s:%s\n", container.User, container.Project, container.Name, ip, port)
+						}
 					}
 
 					return nil
