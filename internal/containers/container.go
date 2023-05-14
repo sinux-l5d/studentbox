@@ -2,6 +2,7 @@ package containers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/containers/podman/v4/pkg/bindings/containers"
 	"github.com/containers/podman/v4/pkg/domain/entities"
@@ -30,4 +31,22 @@ func (c *Container) Status() (string, error) {
 		return "", err
 	}
 	return inspect.State.Status, nil
+}
+
+func (c *Container) GetEnv() (map[string]string, error) {
+	inspect, err := containers.Inspect(c.ctx, c.Name, &containers.InspectOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert list to map
+	env := make(map[string]string)
+	for _, e := range inspect.Config.Env {
+		parts := strings.SplitN(e,"=", 2)
+		if len(parts) == 2 {
+			env[parts[0]] = parts[1]
+		}
+	}
+
+	return env, nil
 }

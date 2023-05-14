@@ -217,6 +217,84 @@ func main() {
 					return manager.SpawnPod(&opt)
 				},
 			},
+			{
+				Name: "envs",
+				Usage: "Print environment variables of a project's runtime",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "user",
+						Aliases:  []string{"u"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name:     "project",
+						Aliases:  []string{"p"},
+						Required: true,
+					},
+					&cli.StringFlag{
+						Name: "container",
+						Aliases: []string{"c"},
+						Usage: "Container partial name (e.g. -c mysql)",
+						Required: false,
+					},
+					&cli.StringFlag{
+						Name: "query",
+						Aliases: []string{"q"},
+						Usage: "Query environment variables (e.g. -q FOO)",
+						Required: false,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					manager, err := newManager(c.App.Writer)
+					if err != nil {
+						return err
+					}
+
+					user, project := c.String("user"), c.String("project")
+					cntnrs, err := manager.GetEnvVars(user, project)
+					if err != nil {
+						return err
+					}
+
+					if c.String("container") != "" {
+						for k := range cntnrs {
+							if !strings.Contains(k, c.String("container")) {
+								delete(cntnrs, k)
+							}
+						}
+					}
+
+					if c.String("query") != "" {
+						// v is a map[string]string
+						// check if query is a partial, lowercase match
+						for _, v := range cntnrs {
+							for k := range v {
+								if !strings.Contains(strings.ToLower(k), strings.ToLower(c.String("query"))) {
+									delete(v, k)
+								}
+							}
+						}
+					}
+
+					if len(cntnrs) == 0 {
+						fmt.Fprintf(c.App.Writer, "No environment variables found\n")
+						return nil
+					}
+
+					fmt.Fprintf(c.App.Writer, "Environment variables of project %s/%s:\n", user, project)
+					for name, envvars := range cntnrs {
+						if len(envvars) == 0 {
+							continue
+						}
+						fmt.Fprintf(c.App.Writer, "- %s:\n", name)
+						for k, v := range envvars {
+							fmt.Fprintf(c.App.Writer, "  - %s: %s\n", k, v)
+						}
+					}
+
+					return nil
+				},
+			},
 		},
 	}
 

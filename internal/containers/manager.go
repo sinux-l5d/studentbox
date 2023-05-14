@@ -277,3 +277,21 @@ func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEn
 
 	return nil
 }
+
+// Return a map with key: container name, value: map of env vars
+func (m *Manager) GetEnvVars(user, project string) (map[string]map[string]string, error) {
+	containers, err := m.GetContainers(user, project)
+	if err != nil {
+		return nil, err
+	}
+	envVars := make(map[string]map[string]string)
+	for _, container := range containers {
+		envs, err := container.GetEnv()
+		if err != nil {
+			return nil, err
+		}
+		envVars[container.Name] = envs
+	}
+
+	return envVars, nil
+}
