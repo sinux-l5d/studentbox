@@ -64,12 +64,14 @@ const (
 
 func DefaultManagerOptions() *ManagerOptions {
 	sockDir := os.Getenv("XDG_RUNTIME_DIR")
+	pwd, _ := os.Getwd()
 	if sockDir == "" {
 		sockDir = "/tmp"
 	}
 	return &ManagerOptions{
 		SocketPath: "unix://" + sockDir + "/podman/podman.sock",
 		DataPath:   "./data",
+		HostPath:   pwd,
 		Logger:     log.New(os.Stdout, "[containers] ", log.LstdFlags),
 	}
 }
@@ -252,6 +254,7 @@ func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEn
 		}
 	}
 
+	// create container
 	r, err := containers.CreateWithSpec(*m.ctx, spec, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
@@ -263,6 +266,7 @@ func (m *Manager) SpawnContainerInPod(podID string, img *runtimes.Image, inputEn
 		m.log.Println("WARN:", r.Warnings)
 	}
 
+	// start container
 	err = containers.Start(*m.ctx, r.ID, nil)
 	if err != nil {
 		m.log.Printf("ERROR: Failed to start container %s in pod %s, rolling back: %v", r.ID, podID, err)

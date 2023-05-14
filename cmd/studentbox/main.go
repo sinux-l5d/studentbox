@@ -16,16 +16,18 @@ import (
 
 var (
 	// global flags
-	socket  string
-	version = "dev"
+	socket   string
+	hostPath string
+	version  = "dev"
 )
 
 func newManager(w io.Writer) (*containers.Manager, error) {
 	opt := containers.DefaultManagerOptions()
 	opt.SocketPath = socket
+	if hostPath != "" {
+		opt.HostPath = hostPath
+	}
 	// get abs current dir
-	pwd, _ := os.Getwd()
-	opt.HostPath = pwd
 	if w == nil {
 		opt.Logger = log.New(io.Discard, "", log.Flags())
 	} else {
@@ -56,6 +58,13 @@ func main() {
 				Aliases:     []string{"s"},
 				Value:       containers.DefaultManagerOptions().SocketPath,
 				Destination: &socket,
+			},
+			&cli.StringFlag{
+				Name:        "hostpath",
+				Usage:       "Path to the host's root directory. Used mostly when ran in a container",
+				Value:       containers.DefaultManagerOptions().HostPath,
+				EnvVars:     []string{"HOSTPATH"},
+				Destination: &hostPath,
 			},
 		},
 		Commands: []*cli.Command{
@@ -116,7 +125,7 @@ func main() {
 							return err
 						}
 					}
-					
+
 					status := make(map[string]string)
 					for _, container := range cntnrs {
 						s, err := container.Status()
@@ -135,7 +144,7 @@ func main() {
 				},
 			},
 			{
-				Name:   "spawn",
+				Name:  "spawn",
 				Usage: "Spawn a runtime (pod of container) for a project",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -149,17 +158,17 @@ func main() {
 						Required: true,
 					},
 					&cli.StringFlag{
-						Name: "runtime",
-						Aliases: []string{"r"},
+						Name:     "runtime",
+						Aliases:  []string{"r"},
 						Required: true,
 					},
 					&cli.StringSliceFlag{
-						Name: "env",
+						Name:    "env",
 						Aliases: []string{"e"},
-						Usage: "Set environment variables (e.g. -e FOO=bar)",
+						Usage:   "Set environment variables (e.g. -e FOO=bar)",
 						Action: func(_ *cli.Context, v []string) error {
 							for _, value := range v {
-								if !strings.Contains(value, "=") || strings.HasPrefix(value, "=") || strings.HasSuffix(value, "="){
+								if !strings.Contains(value, "=") || strings.HasPrefix(value, "=") || strings.HasSuffix(value, "=") {
 									return fmt.Errorf("invalid environment variable %s", value)
 								}
 							}
@@ -188,10 +197,10 @@ func main() {
 					}
 
 					opt := containers.PodOptions{
-						User:    c.String("user"),
-						Project: c.String("project"),
+						User:         c.String("user"),
+						Project:      c.String("project"),
 						InputEnvVars: envvar,
-						Runtime: runtime,
+						Runtime:      runtime,
 						// Runtime: runtimes.Runtime{
 						// 	Name: "dummy",
 						// 	Images: map[string]runtimes.Image{
