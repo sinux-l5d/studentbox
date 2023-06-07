@@ -86,6 +86,10 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 1024
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
 
   Instance:
     Type: AWS::EC2::Instance
@@ -116,6 +120,8 @@ Resources:
         podman create --name studentbox ghcr.io/sinux-l5d/studentbox/cli:latest
         podman cp studentbox:/studentbox /usr/local/bin/studentbox
         podman rm -f studentbox
+
+        sed -i 's/^# * cgroup_manager *= *".*"/cgroup_manager = "cgroupfs"/' /usr/share/containers/containers.conf
 Outputs:
 
   VpcId:
